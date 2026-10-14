@@ -36,12 +36,27 @@ SD_LORA_TAGS="${SD_LORA_TAGS-<lora:waiAnima:0.8>}"
 LORA_ARGS=()
 [ -z "$SD_LORA_TAGS" ] || LORA_ARGS=(-p "$SD_LORA_TAGS")
 
+# The web page (built by build_webui.sh) is served at / when it exists and this sd-server knows the option: an unknown option would stop the
+# server from starting. A sd-server built with -DSD_SERVER_BUILD_FRONTEND=ON has its own page and needs neither.
+WEBUI_HTML="${WEBUI_HTML:-${RUNNER_DIR}/webui.html}"
+WEBUI_ARGS=()
+WEBUI_NOTE="none (build_webui.sh makes one)"
+if [ -f "$WEBUI_HTML" ]; then
+  server_help="$("$SERVER" --help 2>&1 || true)"
+  if [[ "$server_help" == *--serve-html-path* ]]; then
+    WEBUI_ARGS=(--serve-html-path "$WEBUI_HTML")
+    WEBUI_NOTE="http://${LISTEN_IP}:${LISTEN_PORT}/"
+  else
+    WEBUI_NOTE="not served: this sd-server does not know --serve-html-path"
+  fi
+fi
+
 mkdir -p "$LOG_DIR"
-echo "sd-server on http://${LISTEN_IP}:${LISTEN_PORT} (log: ${LOG_DIR}/server.log, default LoRA: ${SD_LORA_TAGS:-none})"
+echo "sd-server on http://${LISTEN_IP}:${LISTEN_PORT} (log: ${LOG_DIR}/server.log, default LoRA: ${SD_LORA_TAGS:-none}, web page: ${WEBUI_NOTE})"
 "$SERVER" \
   --diffusion-model "$M/diffusion_models/anima-turbo-v1.1.safetensors" \
   --llm "$M/text_encoders/qwen_3_06b_base.safetensors" \
   --vae "$M/vae/qwen_image_vae.safetensors" \
-  --lora-model-dir "$M/loras" "${LORA_ARGS[@]}" \
+  --lora-model-dir "$M/loras" "${LORA_ARGS[@]}" "${WEBUI_ARGS[@]}" \
   --diffusion-fa --cfg-scale 1.0 \
   --listen-ip "$LISTEN_IP" --listen-port "$LISTEN_PORT" -v "$@" 2>&1 | tee -a "$LOG_DIR/server.log"
